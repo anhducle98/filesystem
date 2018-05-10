@@ -67,14 +67,22 @@ struct inode_t {
     uint32_t size;
     uint16_t block_count;
     uint8_t type;
-    pointer_t pointers[NUM_DIRECT_POINTERS + 1]; // count from start of disk
+    pointer_t pointers[NUM_DIRECT_POINTERS + 1]; // count from start of data region
+
+    uint32_t inum;
 
     vector< pointer_t > data_blocks_ids;
 
-    void read_from_disk(FILE *fp, uint32_t inum) { // inum start from beginning of disk
+    void seek(FILE *fp) {
         uint32_t block_id = 1 + NUM_BLOCK_BITMAP * 2 + inum / NUM_INODE_EACH_BLOCK;
         uint32_t id_in_block = inum % NUM_INODE_EACH_BLOCK;
         fseek(fp, block_id * BLOCK_SIZE + id_in_block * INODE_SIZE, SEEK_SET);
+    }
+
+    void read_from_disk(FILE *fp, uint32_t inum) { // inum start from beginning of inode table
+        this->inum = inum;
+        seek(fp);
+
         fread(&size, sizeof size, 1, fp);
         fread(&block_count, sizeof block_count, 1, fp);
         fread(&type, sizeof type, 1, fp);
@@ -83,8 +91,8 @@ struct inode_t {
         for (int i = 0; i < block_count; ++i) {
             if (i < NUM_DIRECT_POINTERS) {
                 data_blocks_ids.push_back(pointers[i]);
-            } else {
-                fseek(fp, pointers[NUM_DIRECT_POINTERS] * BLOCK_SIZE, SEEK_SET);
+            } else { 
+                fseek(fp, START_BYTE_OF_DATA_REGION + pointers[NUM_DIRECT_POINTERS] * BLOCK_SIZE, SEEK_SET);
                 uint16_t buffer[BLOCK_SIZE / POINTER_SIZE];
                 fread(buffer, sizeof(uint16_t), BLOCK_SIZE / POINTER_SIZE, fp);
                 uint32_t remain = block_count - NUM_DIRECT_POINTERS;
@@ -96,22 +104,30 @@ struct inode_t {
     }
 
     void write_to_disk(FILE *fp) {
-        
+        assert(imap.get(ROOT_INUM) == 0);
+        imap.set(ROOT_INUM);
+
+        seek(fp);
+
+        fwrite(&size, sizeof size, 1, fp);
+        fwrite(&block_count, sizeof block_count, 1, fp);
+        fwrite(&type, sizeof type, 1, fp);
+        fwrite(pointers, sizeof(pointer_t), NUM_DIRECT_POINTERS + 1, fp);
     }
 };
 
 struct directory_t {
+    inode_t inode;
     vector< pair<uint16_t, string> > a;
 
     void read_from_disk(FILE *fp, uint16_t inum) {
-        inode_t inode;
         inode.read_from_disk(fp, inum);
         assert(inode.type == inode_t::TYPE_DIRECTORY);
 
         vector<uint8_t> buffer;
         uint8_t block_buffer[BLOCK_SIZE];
         for (pointer_t data_block_id : inode.data_blocks_ids) {
-            fseek(fp, data_block_id * BLOCK_SIZE, SEEK_SET);
+            fseek(fp, START_BYTE_OF_DATA_REGION + data_block_id * BLOCK_SIZE, SEEK_SET);
             fread(block_buffer, sizeof(uint8_t), BLOCK_SIZE, fp);
             for (int i = 0; i < BLOCK_SIZE; ++i) {
                 buffer.push_back(block_buffer[i]);
@@ -130,6 +146,32 @@ struct directory_t {
             }
             a.push_back(make_pair(inum_child, file_name));
             if (cur_pos + 1 == buffer.size() || buffer[cur_pos + 1] == 0) break;
+        }
+    }
+
+    uint8_t* serialize() {
+        int num_bytes = 0;
+        for (auto &it : a) {
+            num_bytes += 2;
+            num_bytes += it.second.size() + 1; // +1 for ending byte '\0'
+        }
+        uint8_t *res = new uint8_t[num_bytes];
+        int cur_pos = 0;
+        for (auto &it : a) {
+            res[cur_pos] = it.first & 0xFF;
+            res[cur_pos + 1] = it.first >> 8;
+            cur_pos += 2;
+            for (int i = 0; i < it.second.size(); ++i) {
+                res[cur_pos++] = it.second[i];
+            }
+        }
+        assert(cur_pos == num_bytes);
+        return res;
+    }
+
+    void write_to_disk(FILE *fp) {
+        inode.write_to_disk(fp);
+        for (pointer_t data_block_id : inode.data_blocks_ids) {
         }
     }
 };
@@ -164,16 +206,17 @@ struct bitmap_t {
 } imap, dmap;
 
 void create_empty_directory(FILE *fp, const char *name, uint16_t parent_inum) {
+    directory_t dir;
     if (parent_inum == -1) {
         // create root
-        assert(imap.get(ROOT_INUM) == 0);
-        imap.set(ROOT_INUM);
-        inode_t inode;
-        inode.size = 0;
-        inode.block_count = 1;
-        inode.type = inode_t::TYPE_DIRECTORY;
-        inode.pointers[0] = START_BLOCK_OF_DATA_REGION; // hardcode this number;
-        inode.write_to_disk(fp);
+        dir.inode.inum = ROOT_INUM;
+        dir.inode.size = 0;
+        dir.inode.block_count = 1;
+        dir.inode.type = inode_t::TYPE_DIRECTORY;
+        dir.inode.pointers[0] = 0; // hardcode this number;
+        dir.a.push_back(make_pair(0, "."));
+        dir.write_to_disk(fp);
+
     } else {
         // TODO
     }
