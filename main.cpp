@@ -512,6 +512,7 @@ void list_disk() {
 }
 
 void copy_file_from_outside(string path, string file_name) {
+    cout << path << " " << file_name << endl;
 	FILE *fp = fopen(DEFAULT_DISK, "r+b");
 
 	vector<string> dir = split_path(path);
@@ -537,7 +538,7 @@ void copy_file_from_outside(string path, string file_name) {
         assert(num_read <= BLOCK_SIZE);
         
         new_inode.push_more_data(num_read);
-        //printf("num_read=%d, last_block_id=%d\n", num_read, (int)new_inode.data_blocks_ids.back());
+        printf("num_read=%d, last_block_id=%d\n", num_read, (int)new_inode.data_blocks_ids.back());
 		fseek(fp, START_BYTE_OF_DATA_REGION + new_inode.data_blocks_ids.back() * BLOCK_SIZE, SEEK_SET);
 		fwrite(buffer, sizeof(uint8_t), num_read, fp);
         if (num_read < BLOCK_SIZE) break;
@@ -550,10 +551,11 @@ void copy_file_from_outside(string path, string file_name) {
 
     fclose(fp);
     
-
+    printf("added file successfully \n");
 }
 
 void copy_file_to_outside(string path, string copy_file_name, string paste_file_name){
+    //cout << path << " " << copy_file_name << " " << paste_file_name;
     FILE *fp = fopen(DEFAULT_DISK, "rb");
     FILE *paste_file = fopen(paste_file_name.c_str(), "wb");
 
@@ -585,7 +587,7 @@ void copy_file_to_outside(string path, string copy_file_name, string paste_file_
 
     fclose(fp);
     fclose(paste_file);
-
+    printf("copy file successfully \n");
 }
 
 
@@ -598,7 +600,13 @@ void delete_file_disk(string path, string file_name){
 
     printf("inum of delete file %d \n", inum);
 
-    
+    inode_t inode;
+    inode.read_from_disk(fp, inum);
+
+    for(uint32_t data_block_id : inode.data_blocks_ids){
+        assert(dmap.get(data_block_id) != 0);
+        dmap.toggle(data_block_id);
+    }
 
     for (int i = 0; i < cur_dir.a.size(); i++) {
         if(cur_dir.a[i].second == file_name){
@@ -611,24 +619,50 @@ void delete_file_disk(string path, string file_name){
 
 
     cur_dir.write_to_disk(fp);
-
+    printf("deleted file \n");
     fclose(fp);
 }
 
 
 int main() {
-    create_empty_disk("HD.dat");
-    read_disk_info();
+
+    
+    //create_empty_disk("HD.dat");
+    //read_disk_info();
+
     //read_all_bytes("HD.dat");
 
-    copy_file_from_outside("/", "os.txt");
-    copy_file_from_outside("/", "ahihi.cpp");
+    //copy_file_from_outside("/", "os.txt");
+    /*copy_file_from_outside("/", "ahihi.cpp");
 
-    //delete_file_disk("/", "os.txt");
+    delete_file_disk("/", "os.txt");
     delete_file_disk("/", "ahihi.cpp");
     read_disk_info();
 
-    list_disk();
+    list_disk();*/
+
+    string type, path, filename, copy_file_name;
+    while(1){
+        cin >> type;
+        if(type == "add"){
+            cin >> path >> filename;
+            
+            copy_file_from_outside(path, filename);
+        }
+        if(type == "get"){
+            cin >> path >> filename >> copy_file_name;
+            copy_file_to_outside(path, filename, copy_file_name);
+        }
+
+        if(type == "delete"){
+            cin >> path >> filename;
+            delete_file_disk(path, filename);
+        }
+
+        if(type == "00"){
+            break;
+        }
+    }
     
     //copy_file_to_outside("/", "os.txt", "copyfile.txt");
     return 0;
