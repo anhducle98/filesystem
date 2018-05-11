@@ -88,6 +88,8 @@ struct inode_t {
         fread(&type, sizeof type, 1, fp);
         fread(pointers, sizeof(pointer_t), NUM_DIRECT_POINTERS + 1, fp);
 
+        data_blocks_ids.clear();
+
         for (int i = 0; i < block_count; ++i) {
             if (i < NUM_DIRECT_POINTERS) {
                 data_blocks_ids.push_back(pointers[i]);
@@ -113,6 +115,11 @@ struct inode_t {
         fwrite(&block_count, sizeof block_count, 1, fp);
         fwrite(&type, sizeof type, 1, fp);
         fwrite(pointers, sizeof(pointer_t), NUM_DIRECT_POINTERS + 1, fp);
+
+        if (block_count > NUM_DIRECT_POINTERS) {
+            fseek(fp, START_BYTE_OF_DATA_REGION + pointers[NUM_DIRECT_POINTERS] * BLOCK_SIZE, SEEK_SET);
+            fwrite(data_blocks_ids.data() + NUM_DIRECT_POINTERS * sizeof(pointer_t), sizeof(pointer_t), data_blocks_ids.size() - NUM_DIRECT_POINTERS, fp);
+        }
     }
 };
 
@@ -149,12 +156,29 @@ struct directory_t {
         }
     }
 
-    uint8_t* serialize() {
+    uint16_t get_inum_of_child(string child) {
+   		for(int i = 0; i < a.size(); i++) {
+   			if(a[i].second == child){
+   				return a[i].first;
+   			}
+   		}
+
+   		return -1;
+   	}
+
+    uint32_t get_byte_array_size() {
         int num_bytes = 0;
         for (auto &it : a) {
             num_bytes += 2;
             num_bytes += it.second.size() + 1; // +1 for ending byte '\0'
         }
+        num_bytes += 1;
+        return num_bytes;
+    }
+
+    uint8_t* serialize() {
+        int num_bytes = get_byte_array_size();
+
         uint8_t *res = new uint8_t[num_bytes];
         int cur_pos = 0;
         for (auto &it : a) {
@@ -164,9 +188,16 @@ struct directory_t {
             for (int i = 0; i < it.second.size(); ++i) {
                 res[cur_pos++] = it.second[i];
             }
+            res[cur_pos++] = 0;
         }
+        res[cur_pos++] = 0;
         assert(cur_pos == num_bytes);
         return res;
+    }
+
+    void allocate() {
+        int num_bytes = get_byte_array_size();
+        
     }
 
     void write_to_disk(FILE *fp) {
@@ -202,6 +233,16 @@ struct bitmap_t {
             count += __builtin_popcount(element[i]);
         }
         return count;
+    }
+
+    uint16_t find_free() {
+    	for (int i = 0; i < 32 * NUM_INTS_BITMAP; i++) {
+    		if (get(i) == 0) {
+    			return i;
+    		}
+    	}
+
+    	return -1;
     }
 } imap, dmap;
 
@@ -316,7 +357,59 @@ void read_all_bytes(const char *file_name) {
     fclose(fp);
 }
 
+directory_t get_inum_from_path(vector < string > dir, FILE *fp) {
+	directory_t cur_dir;
+	cur_dir.read_from_disk(fp, ROOT_INUM);
+	for(int i = 0; i < dir.size(); i++) {
+		int inum = cur_dir.get_inum_of_child(dir[i]);
+		cur_dir.read_from_disk(fp, inum);
+	}
+	return cur_dir;
 
+}
+
+inode_t add_file(string path, string file_name) {
+	FILE *fp = fopen(DEFAULT_DISK, "wrb");
+
+	vector < string > dir;
+	for (int i = 0; i < path.size();) {
+		int pos = i;
+		while (path[pos] != '/' && pos < path.size())
+			pos++;
+		if (i != pos)
+			dir.push_back(path.substr(i, pos - i));
+		i = pos + 1;
+	}
+
+	directory_t cur_dir = get_inum_from_path(dir, fp);
+
+	uint16_t new_inum = imap.find_free();
+	inode_t new_inode;
+
+	new_inode.inum = new_inum;
+	new_inode.block_count = 0;
+	new_inode.size = 0;
+
+	FILE *cur_file = fopen(file_name);
+
+	char c;
+	while (!feof(cur_file)) {
+		uint8_t buffer[BLOCK_SIZE];
+		uint32_t num_read = fread(buffer, 1, BLOCK_SIZE, cur_file);
+		uint16_t new_block = dmap.find_free();
+
+		fseek(fp, START_BYTE_OF_DATA_REGION + new_block * BLOCK_SIZE, SEEK_SET);
+		fwrite(buffer, 1, BLOCK_SIZE, fp);
+
+		dmap.set(new_block);
+
+		new_inode.data_blocks_ids.push_back(new_block);
+		new_inode.block_count++;
+		new_inode += num_read;
+	}
+
+	new_inode.write_to_disk(fp);
+}
 
 int main() {
     //create_empty_disk("HD.dat");
