@@ -111,7 +111,7 @@ struct bitmap_t {
             uint32_t int_id = need_update.back();
             need_update.pop_back();
             fseek(fp, start_block * BLOCK_SIZE + sizeof(uint32_t) * int_id, SEEK_SET);
-            printf("bit_map_t::write_to_disk(), start_block=%d, int_id=%d\n", start_block, int_id);
+            //printf("bit_map_t::write_to_disk(), start_block=%d, int_id=%d\n", start_block, int_id);
             fwrite(element + int_id, sizeof(uint32_t), 1, fp);
         }
     }
@@ -167,7 +167,7 @@ struct inode_t {
     }
 
     void write_to_disk(FILE *fp) {
-        printf("inode_t::write_to_distk(), inum=%d\n", inum);
+        //printf("inode_t::write_to_distk(), inum=%d\n", inum);
         imap.set(inum);
 
         seek(fp);
@@ -303,24 +303,24 @@ struct directory_t {
 
         inode.push_more_data(total_size - inode.size);
 
-        printf("directory_t::write_to_disk(), total_size=%d\n", total_size);
+        /*printf("directory_t::write_to_disk(), total_size=%d\n", total_size);
         printf("byte_array=");
         for (int i = 0; i < total_size; ++i) {
             printf("%02x ", byte_array[i]);
         }
-        printf("\n");
+        printf("\n");*/
 
         inode.write_to_disk(fp);
 
-        printf("directory_t::write_to_disk(), write inode success!, inode.data_block_ids.size()=%d, inode.size=%d, inode.block_count=%d\n", (int)inode.data_blocks_ids.size(), inode.size, inode.block_count);
+       // printf("directory_t::write_to_disk(), write inode success!, inode.data_block_ids.size()=%d, inode.size=%d, inode.block_count=%d\n", (int)inode.data_blocks_ids.size(), inode.size, inode.block_count);
         uint32_t cur_pos = 0;
         for (pointer_t data_block_id : inode.data_blocks_ids) {
-            printf("data_block_id=%d\n", data_block_id);
+         //   printf("data_block_id=%d\n", data_block_id);
             fseek(fp, START_BYTE_OF_DATA_REGION + data_block_id * BLOCK_SIZE, SEEK_SET);
             fwrite(byte_array + cur_pos, sizeof(uint8_t), min(BLOCK_SIZE, total_size - cur_pos), fp);
             cur_pos += BLOCK_SIZE;
         }
-        printf("end\n");
+        //printf("end\n");
         delete byte_array;
     }
 };
@@ -437,7 +437,7 @@ void read_all_bytes(const char *file_name) {
 directory_t get_dir_from_path(vector < string > dir, FILE *fp) {
 	directory_t cur_dir;
     cur_dir.read_from_disk(fp, ROOT_INUM);
-    printf("read from disk\n");
+    //printf("read from disk\n");
 	for(int i = 0; i < dir.size(); i++) {
         uint16_t inum = cur_dir.get_inum_of_child(dir[i]);
         assert(inum != NON_EXIST_CONSTANT);
@@ -465,7 +465,7 @@ void dfs(FILE *fp, uint16_t inum, string cur_name = "/", int level = 0) {
     inode.read_from_disk(fp, inum);
 
     for (int i = 0; i < level; ++i) {
-        printf("----");
+        printf("-");
     }
     printf("| %s, inum=%d, size=%d\n", cur_name.c_str(), inode.inum, inode.size);
     //return;
@@ -490,13 +490,13 @@ void list_disk() {
     fclose(fp);
 }
 
-void copy_file(string path, string file_name) {
+void copy_file_from_outside(string path, string file_name) {
 	FILE *fp = fopen(DEFAULT_DISK, "r+b");
 
 	vector<string> dir = split_path(path);
     directory_t cur_dir = get_dir_from_path(dir, fp);
     
-    printf("read dir, children_size=%d\n", (int)cur_dir.a.size());
+    
 
 	uint16_t new_inum = imap.find_free();
 	inode_t new_inode;
@@ -505,7 +505,6 @@ void copy_file(string path, string file_name) {
 	new_inode.block_count = 0;
     new_inode.size = 0;
     
-    printf("create inode\n");
 
 	FILE *cur_file = fopen(file_name.c_str(), "rb");
 
@@ -517,20 +516,57 @@ void copy_file(string path, string file_name) {
         assert(num_read <= BLOCK_SIZE);
         
         new_inode.push_more_data(num_read);
-        printf("num_read=%d, last_block_id=%d\n", num_read, (int)new_inode.data_blocks_ids.back());
+        //printf("num_read=%d, last_block_id=%d\n", num_read, (int)new_inode.data_blocks_ids.back());
 		fseek(fp, START_BYTE_OF_DATA_REGION + new_inode.data_blocks_ids.back() * BLOCK_SIZE, SEEK_SET);
 		fwrite(buffer, sizeof(uint8_t), num_read, fp);
         if (num_read < BLOCK_SIZE) break;
     }
     fclose(cur_file);
-    printf("prepared\n");
 
     new_inode.write_to_disk(fp);
     cur_dir.a.push_back(make_pair(new_inode.inum, file_name));
     cur_dir.write_to_disk(fp);
 
     fclose(fp);
-    printf("done_all\n");
+    
+
+}
+
+void copy_file_to_outside(string path, string copy_file_name, string paste_file_name){
+    FILE *fp = fopen(DEFAULT_DISK, "rb");
+    FILE *paste_file = fopen(paste_file_name.c_str(), "wb");
+
+    vector < string > dir = split_path(path);
+    directory_t cur_dir = get_dir_from_path(dir, fp);
+
+    uint16_t inum = cur_dir.get_inum_of_child(copy_file_name);
+    printf("inum of copy file %d \n", inum);
+
+    inode_t inode;
+    inode.read_from_disk(fp, inum);
+
+    uint8_t block_buffer[BLOCK_SIZE];
+    memset(block_buffer, 0, sizeof(block_buffer));
+
+    //printf("size of file = %d nbblocks = %d \n", inode.size, inode.block_count);
+    uint16_t size_file = inode.size;
+
+    for(pointer_t block_id : inode.data_blocks_ids) {
+        //printf("%d ", block_id);
+        
+        fseek(fp, START_BYTE_OF_DATA_REGION + block_id * BLOCK_SIZE, SEEK_SET);
+        fread(block_buffer, sizeof(uint8_t), BLOCK_SIZE, fp);
+        fwrite(block_buffer, sizeof(uint8_t), size_file, paste_file);
+
+        size_file -= BLOCK_SIZE;
+    }
+
+
+    fclose(fp);
+    fclose(paste_file);
+
+
+
 
 }
 
@@ -539,11 +575,13 @@ int main() {
     read_disk_info();
     //read_all_bytes("HD.dat");
 
-    copy_file("/", "os.txt");
+    copy_file_from_outside("/", "os.txt");
     //read_disk_info();
     list_disk();
 
-    copy_file("/", "ahihi.cpp");
+    copy_file_from_outside("/", "ahihi.cpp");
+
     list_disk();
+    copy_file_to_outside("/", "os.txt", "copyfile.txt");
     return 0;
 }
