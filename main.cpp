@@ -50,16 +50,72 @@ const uint32_t NUM_INODE_EACH_BLOCK = BLOCK_SIZE / INODE_SIZE;
 const uint32_t NUM_BLOCK_INODE_TABLE = NUM_BYTE_INODE_TABLE / BLOCK_SIZE;
 const uint32_t START_BLOCK_OF_DATA_REGION = 1 + NUM_BLOCK_BITMAP * 2 + NUM_BLOCK_INODE_TABLE;
 const uint32_t START_BYTE_OF_DATA_REGION = START_BLOCK_OF_DATA_REGION * BLOCK_SIZE;
-
+const uint32_t IMAP_START_BLOCK = 1;
+const uint32_t DMAP_START_BLOCK = IMAP_START_BLOCK + NUM_BLOCK_BITMAP;
 const uint8_t POINTER_SIZE = 2;
 const uint16_t ROOT_INUM = 0;
 
-
+const uint16_t NON_EXIST_CONSTANT = (uint16_t)(-1);
 
 const uint32_t NUM_DIRECT_POINTERS = 11;
 const uint32_t NUM_INTS_BITMAP = 1 << 10;
 
 const uint32_t BUFFER_SIZE = 1 << 9; // TODO, remove this
+
+struct bitmap_t {
+    uint32_t element[NUM_INTS_BITMAP];
+    vector<uint32_t> need_update;
+    int start_block; // imap starts from 1, dmap starts from 9
+
+    bitmap_t(int start_block): start_block(start_block) {}
+
+    void read_from_disk(FILE *fp) {
+        fseek(fp, start_block * BLOCK_SIZE, SEEK_SET);
+        fread(element, sizeof(uint32_t), NUM_INTS_BITMAP, fp);
+    }
+
+    bool get(int i) {
+        return element[i >> 5] >> (i & 0x1F) & 1;
+    }
+
+    bool set(int i) {
+        need_update.push_back(i >> 5);
+        return (element[i >> 5] |= (1 << (i & 0x1F)));
+    }
+
+    bool toggle(int i) {
+        need_update.push_back(i >> 5);
+        return (element[i >> 5] ^= (1 << (i & 0x1F)));
+    }
+
+    int count() {
+        int count = 0;
+        for (int i = 0; i < NUM_INTS_BITMAP; ++i) {
+            count += __builtin_popcount(element[i]);
+        }
+        return count;
+    }
+
+    uint16_t find_free() {
+    	for (int i = 0; i < 32 * NUM_INTS_BITMAP; i++) {
+    		if (get(i) == 0) {
+    			return i;
+    		}
+    	}
+
+    	return NON_EXIST_CONSTANT;
+    }
+
+    void write_to_disk(FILE *fp) {
+        while (!need_update.empty()) {
+            uint32_t int_id = need_update.back();
+            need_update.pop_back();
+            fseek(fp, start_block * BLOCK_SIZE + sizeof(uint32_t) * int_id, SEEK_SET);
+            printf("bit_map_t::write_to_disk(), start_block=%d, int_id=%d\n", start_block, int_id);
+            fwrite(element + int_id, sizeof(uint32_t), 1, fp);
+        }
+    }
+} imap(IMAP_START_BLOCK), dmap(DMAP_START_BLOCK);
 
 struct inode_t {
     static const uint8_t TYPE_DIRECTORY = 1;
@@ -77,9 +133,12 @@ struct inode_t {
         uint32_t block_id = 1 + NUM_BLOCK_BITMAP * 2 + inum / NUM_INODE_EACH_BLOCK;
         uint32_t id_in_block = inum % NUM_INODE_EACH_BLOCK;
         fseek(fp, block_id * BLOCK_SIZE + id_in_block * INODE_SIZE, SEEK_SET);
+        printf("seek(), block_id=%d, id_in_block=%d\n", block_id, id_in_block);
     }
 
     void read_from_disk(FILE *fp, uint32_t inum) { // inum start from beginning of inode table
+        printf("start reading inode, inum=%d\n", inum);
+        memset(pointers, NON_EXIST_CONSTANT, sizeof(pointers));
         this->inum = inum;
         seek(fp);
 
@@ -87,6 +146,8 @@ struct inode_t {
         fread(&block_count, sizeof block_count, 1, fp);
         fread(&type, sizeof type, 1, fp);
         fread(pointers, sizeof(pointer_t), NUM_DIRECT_POINTERS + 1, fp);
+
+        printf("size=%u, type=%d\n", size, type);
 
         data_blocks_ids.clear();
 
@@ -106,8 +167,7 @@ struct inode_t {
     }
 
     void write_to_disk(FILE *fp) {
-        assert(imap.get(ROOT_INUM) == 0);
-        imap.set(ROOT_INUM);
+        imap.set(inum);
 
         seek(fp);
 
@@ -120,6 +180,34 @@ struct inode_t {
             fseek(fp, START_BYTE_OF_DATA_REGION + pointers[NUM_DIRECT_POINTERS] * BLOCK_SIZE, SEEK_SET);
             fwrite(data_blocks_ids.data() + NUM_DIRECT_POINTERS * sizeof(pointer_t), sizeof(pointer_t), data_blocks_ids.size() - NUM_DIRECT_POINTERS, fp);
         }
+
+        for (uint16_t block_id : data_blocks_ids) {
+            dmap.set(block_id);
+        }
+
+        imap.write_to_disk(fp);
+        dmap.write_to_disk(fp);
+    }
+
+    void push_more_data(uint32_t more) { // more = num_bytes more
+        size += more;
+        int nblock = size / BLOCK_SIZE + (size % BLOCK_SIZE != 0);
+        while (block_count < nblock) {
+            block_count += 1;
+            uint16_t new_block = dmap.find_free();
+            data_blocks_ids.push_back(new_block);
+        }
+
+        for (int i = 0; i < data_blocks_ids.size() && i < NUM_DIRECT_POINTERS; ++i) {
+            pointers[i] = data_blocks_ids[i];
+        }
+        if (data_blocks_ids.size() > NUM_DIRECT_POINTERS) {
+            uint16_t indirect_block = pointers[NUM_DIRECT_POINTERS];
+            if (indirect_block == NON_EXIST_CONSTANT) {
+                indirect_block = dmap.find_free();
+                pointers[NUM_DIRECT_POINTERS] = indirect_block;
+            }
+        }
     }
 };
 
@@ -127,10 +215,7 @@ struct directory_t {
     inode_t inode;
     vector< pair<uint16_t, string> > a;
 
-    void read_from_disk(FILE *fp, uint16_t inum) {
-        inode.read_from_disk(fp, inum);
-        assert(inode.type == inode_t::TYPE_DIRECTORY);
-
+    void read_children_list(FILE *fp) {
         vector<uint8_t> buffer;
         uint8_t block_buffer[BLOCK_SIZE];
         for (pointer_t data_block_id : inode.data_blocks_ids) {
@@ -156,6 +241,13 @@ struct directory_t {
         }
     }
 
+    void read_from_disk(FILE *fp, uint16_t inum) {
+        inode.read_from_disk(fp, inum);
+        printf("done read inode\n");
+        assert(inode.type == inode_t::TYPE_DIRECTORY);
+        read_children_list(fp);
+    }
+
     uint16_t get_inum_of_child(string child) {
    		for(int i = 0; i < a.size(); i++) {
    			if(a[i].second == child){
@@ -163,7 +255,7 @@ struct directory_t {
    			}
    		}
 
-   		return -1;
+   		return NON_EXIST_CONSTANT;
    	}
 
     uint32_t get_byte_array_size() {
@@ -176,10 +268,10 @@ struct directory_t {
         return num_bytes;
     }
 
-    uint8_t* serialize() {
+    uint32_t serialize(uint8_t *&res) {
         int num_bytes = get_byte_array_size();
 
-        uint8_t *res = new uint8_t[num_bytes];
+        res = new uint8_t[num_bytes];
         int cur_pos = 0;
         for (auto &it : a) {
             res[cur_pos] = it.first & 0xFF;
@@ -192,69 +284,40 @@ struct directory_t {
         }
         res[cur_pos++] = 0;
         assert(cur_pos == num_bytes);
-        return res;
-    }
-
-    void allocate() {
-        int num_bytes = get_byte_array_size();
-        
+        return num_bytes;
     }
 
     void write_to_disk(FILE *fp) {
+        uint8_t *byte_array = nullptr;
+        uint32_t total_size = serialize(byte_array);
+
+        inode.push_more_data(total_size - inode.size);
+
+        printf("directory_t::write_to_disk(), total_size=%d\n", total_size);
+
         inode.write_to_disk(fp);
+
+        printf("directory_t::write_to_disk(), write inode success!, inode.data_block_ids.size()=%d, inode.size=%d, inode.block_count=%d\n", (int)inode.data_blocks_ids.size(), inode.size, inode.block_count);
+        uint32_t cur_pos = 0;
         for (pointer_t data_block_id : inode.data_blocks_ids) {
+            printf("data_block_id=%d\n", data_block_id);
+            fseek(fp, START_BYTE_OF_DATA_REGION + data_block_id * BLOCK_SIZE, SEEK_SET);
+            fwrite(byte_array + cur_pos, sizeof(uint8_t), min(BLOCK_SIZE, total_size - cur_pos), fp);
+            cur_pos += BLOCK_SIZE;
         }
+        printf("end\n");
+        delete byte_array;
     }
 };
 
-struct bitmap_t {
-    uint32_t element[NUM_INTS_BITMAP];
-
-    void read_from_disk(FILE *fp, int start_block) { // imap starts from 1, dmap starts from 2
-        fseek(fp, start_block * BLOCK_SIZE, SEEK_SET);
-        fread(element, sizeof(uint32_t), NUM_INTS_BITMAP, fp);
-    }
-
-    bool get(int i) {
-        return element[i >> 5] >> (i & 0x1F) & 1;
-    }
-
-    bool set(int i) {
-        return (element[i >> 5] |= (1 << (i & 0x1F)));
-    }
-
-    bool toggle(int i) {
-        return (element[i >> 5] ^= (1 << (i & 0x1F)));
-    }
-
-    int count() {
-        int count = 0;
-        for (int i = 0; i < NUM_INTS_BITMAP; ++i) {
-            count += __builtin_popcount(element[i]);
-        }
-        return count;
-    }
-
-    uint16_t find_free() {
-    	for (int i = 0; i < 32 * NUM_INTS_BITMAP; i++) {
-    		if (get(i) == 0) {
-    			return i;
-    		}
-    	}
-
-    	return -1;
-    }
-} imap, dmap;
-
 void create_empty_directory(FILE *fp, const char *name, uint16_t parent_inum) {
     directory_t dir;
-    if (parent_inum == -1) {
+    if (parent_inum == NON_EXIST_CONSTANT) {
         // create root
         dir.inode.inum = ROOT_INUM;
         dir.inode.size = 0;
-        dir.inode.block_count = 1;
+        dir.inode.block_count = 0;
         dir.inode.type = inode_t::TYPE_DIRECTORY;
-        dir.inode.pointers[0] = 0; // hardcode this number;
         dir.a.push_back(make_pair(0, "."));
         dir.write_to_disk(fp);
 
@@ -264,7 +327,7 @@ void create_empty_directory(FILE *fp, const char *name, uint16_t parent_inum) {
 }
 
 void create_empty_disk(const char *file_name) {
-    FILE *fp = fopen(file_name, "wb");
+    FILE *fp = fopen(file_name, "r+b");
 
     fwrite(&DISK_SIZE, sizeof DISK_SIZE, 1, fp);
     fwrite(&BLOCK_SIZE, sizeof BLOCK_SIZE, 1, fp);
@@ -279,6 +342,8 @@ void create_empty_disk(const char *file_name) {
     for (int i = 1; i < NUM_BLOCK_DISK; ++i) {
         fwrite(buffer, 1, BLOCK_SIZE, fp);
     }
+
+    create_empty_directory(fp, "/", -1);
     fclose(fp);
 }
 
@@ -303,17 +368,13 @@ void read_disk_info(const char *file_name = DEFAULT_DISK) {
     printf("NUM_BLOCK_DMAP = %d\n", num_block_dmap);
     printf("POINTER_SIZE = %d\n", pointer_size);
 
-    imap.read_from_disk(fp, 1);
-    dmap.read_from_disk(fp, 2);
+    imap.read_from_disk(fp);
+    dmap.read_from_disk(fp);
 
     printf("NUM_INODE = %d\n", imap.count());
     printf("NUM_DATA_BLOCKS = %d\n", dmap.count());
 
     fclose(fp);
-}
-
-void create_empty_file(const ) {
-
 }
 
 void create_zeros_file(const char *file_name, uint32_t num_bytes) {
@@ -346,32 +407,33 @@ void read_all_bytes(const char *file_name) {
     FILE *fp = fopen(file_name, "rb");
     unsigned char buffer[BUFFER_SIZE];
 
-    while (!feof(fp)) {
+    while (1) {
         int num_read = fread(buffer, 1, BUFFER_SIZE, fp);
         for (int i = 0; i < num_read; ++i) {
             printf("%02x ", buffer[i]);
         }
         printf("\n");
+        if (num_read < BUFFER_SIZE) break;
     }
 
     fclose(fp);
 }
 
-directory_t get_inum_from_path(vector < string > dir, FILE *fp) {
+directory_t get_dir_from_path(vector < string > dir, FILE *fp) {
 	directory_t cur_dir;
-	cur_dir.read_from_disk(fp, ROOT_INUM);
+    cur_dir.read_from_disk(fp, ROOT_INUM);
+    printf("read from disk\n");
 	for(int i = 0; i < dir.size(); i++) {
-		int inum = cur_dir.get_inum_of_child(dir[i]);
+        uint16_t inum = cur_dir.get_inum_of_child(dir[i]);
+        assert(inum != NON_EXIST_CONSTANT);
 		cur_dir.read_from_disk(fp, inum);
 	}
 	return cur_dir;
 
 }
 
-inode_t add_file(string path, string file_name) {
-	FILE *fp = fopen(DEFAULT_DISK, "wrb");
-
-	vector < string > dir;
+vector< string > split_path(string path) {
+    vector< string > dir;
 	for (int i = 0; i < path.size();) {
 		int pos = i;
 		while (path[pos] != '/' && pos < path.size())
@@ -379,42 +441,89 @@ inode_t add_file(string path, string file_name) {
 		if (i != pos)
 			dir.push_back(path.substr(i, pos - i));
 		i = pos + 1;
-	}
+    }
+    return dir;
+}
 
-	directory_t cur_dir = get_inum_from_path(dir, fp);
+void dfs(FILE *fp, uint16_t inum, string cur_name = "/", int level = 0) {
+    inode_t inode;
+    inode.read_from_disk(fp, inum);
+
+    for (int i = 0; i < level; ++i) {
+        printf("\t");
+    }
+    printf("%s, size=%d\n", cur_name.c_str(), inode.size);
+    //return;
+
+    if (inode.type == inode_t::TYPE_DIRECTORY) {
+        directory_t dir;
+        dir.inode = inode;
+        dir.read_children_list(fp);
+        printf("dfs(), children_list.size() = %d\n", (int)dir.a.size());
+        for (auto it : dir.a) {
+            if (it.first != inum && it.second != "..") { // not me, not my parent
+                dfs(fp, it.first, it.second, level + 1);
+            }
+        }
+    }
+}
+
+void list_disk() {
+    FILE *fp = fopen(DEFAULT_DISK, "rb");
+    dfs(fp, ROOT_INUM);
+    fclose(fp);
+}
+
+void copy_file(string path, string file_name) {
+	FILE *fp = fopen(DEFAULT_DISK, "rb");
+
+	vector<string> dir = split_path(path);
+    directory_t cur_dir = get_dir_from_path(dir, fp);
+    
+    printf("read dir, children_size=%d\n", (int)cur_dir.a.size());
 
 	uint16_t new_inum = imap.find_free();
 	inode_t new_inode;
 
 	new_inode.inum = new_inum;
 	new_inode.block_count = 0;
-	new_inode.size = 0;
+    new_inode.size = 0;
+    
+    printf("create inode\n");
 
-	FILE *cur_file = fopen(file_name);
+	FILE *cur_file = fopen(file_name.c_str(), "rb");
 
-	char c;
+    uint8_t buffer[BLOCK_SIZE];
+    memset(buffer, 0, sizeof(buffer));
+
 	while (!feof(cur_file)) {
-		uint8_t buffer[BLOCK_SIZE];
-		uint32_t num_read = fread(buffer, 1, BLOCK_SIZE, cur_file);
-		uint16_t new_block = dmap.find_free();
+        uint32_t num_read = fread(buffer, 1, BLOCK_SIZE, cur_file);
+        assert(num_read <= BLOCK_SIZE);
+        
+        new_inode.push_more_data(num_read);
+        printf("num_read=%d, last_block_id=%d\n", num_read, (int)new_inode.data_blocks_ids.back());
+		fseek(fp, START_BYTE_OF_DATA_REGION + new_inode.data_blocks_ids.back() * BLOCK_SIZE, SEEK_SET);
+		fwrite(buffer, sizeof(uint8_t), num_read, fp);
+    }
+    fclose(cur_file);
+    printf("prepared\n");
 
-		fseek(fp, START_BYTE_OF_DATA_REGION + new_block * BLOCK_SIZE, SEEK_SET);
-		fwrite(buffer, 1, BLOCK_SIZE, fp);
+    new_inode.write_to_disk(fp);
+    cur_dir.a.push_back(make_pair(new_inode.inum, file_name));
+    cur_dir.write_to_disk(fp);
 
-		dmap.set(new_block);
+    fclose(fp);
+    printf("done_all\n");
 
-		new_inode.data_blocks_ids.push_back(new_block);
-		new_inode.block_count++;
-		new_inode += num_read;
-	}
-
-	new_inode.write_to_disk(fp);
 }
 
 int main() {
-    //create_empty_disk("HD.dat");
+    create_empty_disk("HD.dat");
     read_disk_info();
     //read_all_bytes("HD.dat");
 
+    copy_file("/", "os.txt");
+    read_disk_info();
+    list_disk();
     return 0;
 }
