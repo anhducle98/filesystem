@@ -99,6 +99,7 @@ struct bitmap_t {
     uint16_t find_free() {
     	for (int i = 0; i < 32 * NUM_INTS_BITMAP; i++) {
     		if (get(i) == 0) {
+                set(i);
     			return i;
     		}
     	}
@@ -138,7 +139,12 @@ struct inode_t {
 
     void read_from_disk(FILE *fp, uint32_t inum) { // inum start from beginning of inode table
         //printf("start reading inode, inum=%d\n", inum);
-        memset(pointers, NON_EXIST_CONSTANT, sizeof(pointers));
+        //memset(pointers, 1, sizeof(pointers));
+        //printf("inum : %d\n", inum);
+        for (int i = 0; i <= NUM_DIRECT_POINTERS; i++) {
+            pointers[i] = NON_EXIST_CONSTANT;
+        }
+
         this->inum = inum;
         seek(fp);
 
@@ -146,6 +152,13 @@ struct inode_t {
         fread(&block_count, sizeof block_count, 1, fp);
         fread(&type, sizeof type, 1, fp);
         fread(pointers, sizeof(pointer_t), NUM_DIRECT_POINTERS + 1, fp);
+
+        printf("pointer : ");
+        for (int i = 0; i <= NUM_DIRECT_POINTERS; i++){
+            printf("%d ", pointers[i]);
+        }
+        printf("\n");
+        printf("size = %d | block_count = %d | type = %d\n", size, block_count, type);
 
         //printf("size=%u, type=%d\n", size, type);
 
@@ -176,6 +189,7 @@ struct inode_t {
         fwrite(&block_count, sizeof block_count, 1, fp);
         fwrite(&type, sizeof type, 1, fp);
         fwrite(pointers, sizeof(pointer_t), NUM_DIRECT_POINTERS + 1, fp);
+        printf("BLOCK_COUNT = %d \n", block_count);
 
         if (block_count > NUM_DIRECT_POINTERS) {
             fseek(fp, START_BYTE_OF_DATA_REGION + pointers[NUM_DIRECT_POINTERS] * BLOCK_SIZE, SEEK_SET);
@@ -191,6 +205,9 @@ struct inode_t {
     }
 
     void push_more_data(uint32_t more) { // more = num_bytes more
+        
+        
+
         size += more;
         int nblock = size / BLOCK_SIZE + (size % BLOCK_SIZE != 0);
         while (block_count < nblock) {
@@ -202,12 +219,19 @@ struct inode_t {
         for (int i = 0; i < data_blocks_ids.size() && i < NUM_DIRECT_POINTERS; ++i) {
             pointers[i] = data_blocks_ids[i];
         }
+
+        
+
+        
         if (data_blocks_ids.size() > NUM_DIRECT_POINTERS) {
             uint16_t indirect_block = pointers[NUM_DIRECT_POINTERS];
-            if (indirect_block == NON_EXIST_CONSTANT) {
-                indirect_block = dmap.find_free();
+
+            
+           // if (indirect_block == NON_EXIST_CONSTANT) {
+                indirect_block = dmap.find_free();    
                 pointers[NUM_DIRECT_POINTERS] = indirect_block;
-            }
+           // }
+           printf("INDIRECT_BLOCK : %d \n", indirect_block);
         }
     }
 };
@@ -549,14 +573,15 @@ void copy_file_to_outside(string path, string copy_file_name, string paste_file_
     memset(block_buffer, 0, sizeof(block_buffer));
 
     //printf("size of file = %d nbblocks = %d \n", inode.size, inode.block_count);
-    uint16_t size_file = inode.size;
+    uint32_t size_file = inode.size;
 
-    for(pointer_t block_id : inode.data_blocks_ids) {
-        //printf("%d ", block_id);
+    for(int i = 0; i < inode.data_blocks_ids.size(); i++) {
+        pointer_t block_id = inode.data_blocks_ids[i];
+        printf("block_id = %d \n", block_id);
         
         fseek(fp, START_BYTE_OF_DATA_REGION + block_id * BLOCK_SIZE, SEEK_SET);
         fread(block_buffer, sizeof(uint8_t), BLOCK_SIZE, fp);
-        fwrite(block_buffer, sizeof(uint8_t), size_file, paste_file);
+        fwrite(block_buffer, sizeof(uint8_t), min(size_file, BLOCK_SIZE), paste_file);
 
         size_file -= BLOCK_SIZE;
     }
@@ -572,16 +597,16 @@ void copy_file_to_outside(string path, string copy_file_name, string paste_file_
 
 int main() {
     create_empty_disk("HD.dat");
-    read_disk_info();
+  //  read_disk_info();
     //read_all_bytes("HD.dat");
 
     copy_file_from_outside("/", "os.txt");
     //read_disk_info();
-    list_disk();
+   // list_disk();
 
-    copy_file_from_outside("/", "ahihi.cpp");
+   // copy_file_from_outside("/", "ahihi.cpp");
 
-    list_disk();
+    //list_disk();
     copy_file_to_outside("/", "os.txt", "copyfile.txt");
     return 0;
 }
