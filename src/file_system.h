@@ -256,7 +256,6 @@ struct file_system_t {
         directory_t cur_dir = get_dir_from_path(dir, fp);
 
         uint16_t inum = cur_dir.get_inum_of_child(copy_file_name);
-        printf("inum of copy file %d \n", inum);
 
         inode_t inode(&imap, &dmap);
         inode.read_from_disk(fp, inum);

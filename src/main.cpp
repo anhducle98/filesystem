@@ -1,34 +1,3 @@
-/*
-DISK_SIZE = 16MB
-BLOCK_SIZE = 512 bytes
-NBLOCKS = 2^15
-POINTER_SIZE = 2 bytes = 8 bit
-I-bitmap = 8 blocks = 8 * 512 bytes = 4 * 1024 bytes = 2^15 bit
-D-bitmap = 8 blocks = 8 * 512 bytes = 4 * 1024 bytes = 2^15 bit
-
-Inode {
-    11 direct pointers = 11 * (2 bytes) = 22 bytes
-    1 single indirect pointer = 2 bytes
-    size = 4 bytes
-    nblock = 2 bytes
-    type = 1 byte //0 - file, 1 - directory, 2 - direct pointers
-    remain: 1
-} = 32 bytes each
-
-=> MAX_FILE_SIZE = (11 + 512 / 2) * 512 = 136704 bytes
-InodeTable = 1MB
-
-Super block {
-    DISK_SIZE: 4 bytes
-    BLOCK_SIZE: 4 bytes
-    
-    I-bitmap block count: 1 bytes
-    D-bitmap block count: 1 bytes
-
-    Pointer size: 1 bytes
-}
-*/
-
 #include <stdio.h>
 #include <vector>
 #include <cassert>
