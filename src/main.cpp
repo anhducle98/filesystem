@@ -12,18 +12,15 @@ void run_test() {
     FS.copy_file_from_outside("/code/", "os.txt");
     FS.copy_file_from_outside("/code/", "shit.cpp");
     FS.copy_file_from_outside("/", "big.txt");
+    FS.create_empty_folder("/code/", "cpp");
+    FS.copy_file_from_outside("/code/cpp/", "shit.cpp");
 
     FS.read_disk_info();
     FS.list_disk();
 
-    FS.delete_file_disk("/code/", "os.txt");
+    FS.delete_folder("/", "code");
     FS.read_disk_info();
     FS.list_disk();
-
-    FS.delete_file_disk("/", "big.txt");
-    FS.list_disk();
-
-    FS.view_text_file("/code/shit.cpp");
 }
 
 int main() {

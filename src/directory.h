@@ -12,7 +12,7 @@ struct directory_t {
     inode_t inode;
     vector< pair<uint16_t, string> > a;
 
-    directory_t(bitmap_t *imap, bitmap_t *dmap) {
+    directory_t(bitmap_t *imap = nullptr, bitmap_t *dmap = nullptr) {
         inode.imap = imap;
         inode.dmap = dmap;
     }
@@ -48,6 +48,15 @@ struct directory_t {
         inode.read_from_disk(fp, inum);
         assert(inode.type == inode_t::TYPE_DIRECTORY);
         read_children_list(fp);
+    }
+
+    void delete_entry(string name) {
+        for (int i = 0; i < a.size(); i++) {
+            if (a[i].second == name) {
+                a.erase(a.begin() + i);
+                break;
+            }
+        }
     }
 
     uint32_t serialize(uint8_t *&res) {

@@ -133,7 +133,7 @@ struct file_system_t {
             cur_dir.inode.size = cur_dir.inode.block_count = 0;
             cur_dir.inode.type = inode_t::TYPE_DIRECTORY;
             cur_dir.a.push_back(make_pair(parent_inum, ".."));
-            cur_dir.a.push_back(make_pair(cur_dir.inode.inum, dir_name));
+            cur_dir.a.push_back(make_pair(cur_dir.inode.inum, "."));
             
             directory_t parent_dir(&imap, &dmap);
             
@@ -279,7 +279,7 @@ struct file_system_t {
         printf("\n# INFO: File %s exported to %s\n", copy_file_name.c_str(), paste_file_name.c_str());
     }
 
-    void delete_file_disk(string path, string file_name) {
+    void delete_file(string path, string file_name) {
         vector < string > dir = split_path(path);
         directory_t cur_dir = get_dir_from_path(dir, fp);
         uint16_t inum = cur_dir.get_inum_of_child(file_name);
@@ -291,23 +291,48 @@ struct file_system_t {
 
         inode_t inode(&imap, &dmap);
         inode.read_from_disk(fp, inum);
+        inode.delete_myself();
 
-        for (uint32_t data_block_id : inode.data_blocks_ids) {
-            assert(dmap.get(data_block_id) != 0);
-            dmap.toggle(data_block_id);
-        }
-
-        for (int i = 0; i < cur_dir.a.size(); i++) {
-            if (cur_dir.a[i].second == file_name) {
-                assert(imap.get(cur_dir.a[i].first) != 0);
-                imap.toggle(cur_dir.a[i].first);
-
-                cur_dir.a.erase(cur_dir.a.begin() + i);
-            }
-        }
-
+        cur_dir.delete_entry(file_name);
         cur_dir.write_to_disk(fp);
+
         printf("\n# INFO: File %s deleted\n", file_name.c_str());
+    }
+
+    void delete_directory(uint16_t inum) {
+        inode_t inode(&imap, &dmap);
+        inode.read_from_disk(fp, inum);
+        if (inode.type == inode_t::TYPE_DIRECTORY) {
+            directory_t cur_dir;
+            cur_dir.inode = inode;
+            cur_dir.read_children_list(fp);
+
+            for (const auto &it : cur_dir.a) {
+                if (it.second != "." && it.second != "..") {
+                    delete_directory(it.first);
+                }
+            }
+
+            cur_dir.inode.delete_myself();
+        } else {
+            inode.delete_myself();
+        }
+    }
+
+    void delete_folder(string path, string dir_name) { // recursive
+        directory_t cur_dir = get_dir_from_path(split_path(path), fp);
+        uint16_t inum = cur_dir.get_inum_of_child(dir_name);
+
+        if (inum == NON_EXIST_CONSTANT) {
+            printf("\n# ERROR: Cannot find folder %s%s\n", path.c_str(), dir_name.c_str());
+            return;
+        }
+
+        delete_directory(inum);
+        cur_dir.delete_entry(dir_name);
+        cur_dir.write_to_disk(fp);
+
+        printf("\n# INFO: Folder %s%s deleted\n", path.c_str(), dir_name.c_str());
     }
 
     ~file_system_t() {

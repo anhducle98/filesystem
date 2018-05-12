@@ -85,6 +85,15 @@ struct inode_t {
         dmap->write_to_disk(fp);
     }
 
+    void delete_myself() {
+        for (uint16_t data_block_id : data_blocks_ids) {
+            assert(dmap->get(data_block_id));
+            dmap->toggle(data_block_id);
+        }
+        assert(imap->get(inum));
+        imap->toggle(inum);
+    }
+
     void push_more_data(int more) { // more = num_bytes more
         size += more;
         int nblock = size / BLOCK_SIZE + (size % BLOCK_SIZE != 0);
