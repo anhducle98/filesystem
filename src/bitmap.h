@@ -56,14 +56,14 @@ struct bitmap_t {
     }
 
     uint16_t find_free() {
-    	for (int i = 0; i < 32 * NUM_INTS_BITMAP; i++) {
-    		if (get(i) == 0) {
+        for (int i = 0; i < 32 * NUM_INTS_BITMAP; i++) {
+            if (get(i) == 0) {
                 set(i);
-    			return i;
-    		}
-    	}
+                return i;
+            }
+        }
 
-    	return NON_EXIST_CONSTANT;
+        return NON_EXIST_CONSTANT;
     }
 };
 

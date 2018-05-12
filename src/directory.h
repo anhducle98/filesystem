@@ -96,13 +96,13 @@ struct directory_t {
     }
 
     uint16_t get_inum_of_child(string child) {
-   		for (int i = 0; i < a.size(); i++) {
-   			if (a[i].second == child) {
-   				return a[i].first;
-   			}
-   		}
-   		return NON_EXIST_CONSTANT;
-   	}
+           for (int i = 0; i < a.size(); i++) {
+               if (a[i].second == child) {
+                   return a[i].first;
+               }
+           }
+           return NON_EXIST_CONSTANT;
+       }
 
     uint32_t get_byte_array_size() {
         int num_bytes = 0;
