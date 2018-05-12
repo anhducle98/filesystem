@@ -282,6 +282,15 @@ struct directory_t {
         read_children_list(fp);
     }
 
+    bool contains(string name) {
+        for (const auto &it : a) {
+            if (it.second == name) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     uint16_t get_inum_of_child(string child) {
    		for(int i = 0; i < a.size(); i++) {
    			if(a[i].second == child){
@@ -557,7 +566,10 @@ void copy_file_from_outside(string path, string file_name) {
 	vector<string> dir = split_path(path);
     directory_t cur_dir = get_dir_from_path(dir, fp);
     
-    
+    if (cur_dir.contains(file_name)) {
+        printf("File exist! Do nothing\n");
+        return;
+    }
 
 	uint16_t new_inum = imap.find_free();
 	inode_t new_inode;
@@ -669,7 +681,10 @@ void create_empty_folder(string path, string folder_name){
     vector < string > dir = split_path(path);
     
     directory_t cur_dir = get_dir_from_path(dir, fp);
-    
+    if (cur_dir.contains(folder_name)) {
+        printf("Folder exist! Do nothing\n");
+        return;
+    }
     
     create_empty_directory(fp, folder_name, cur_dir.inode.inum);
 
@@ -679,11 +694,13 @@ void create_empty_folder(string path, string folder_name){
 
 
 void callsystem(){
-    create_empty_disk("HD.dat");
+    //create_empty_disk("HD.dat");
     read_disk_info();
 
     //read_all_bytes("HD.dat");
     copy_file_from_outside("/", "big.txt");
+    create_empty_folder("/", "code");
+    copy_file_from_outside("/code/", "main.cpp");
 /*    copy_file_from_outside("/", "ahihi.cpp");
 
    // delete_file_disk("/", "os.txt");
