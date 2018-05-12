@@ -126,9 +126,17 @@ struct inode_t {
     uint8_t type;
     pointer_t pointers[NUM_DIRECT_POINTERS + 1]; // count from start of data region
 
-    uint32_t inum;
+    uint16_t inum;
 
     vector< pointer_t > data_blocks_ids;
+
+    inode_t() {
+        size = 0;
+        block_count = 0;
+        type = 0;
+        inum = NON_EXIST_CONSTANT;
+        memset(pointers, NON_EXIST_CONSTANT, sizeof(pointers));
+    }
 
     void seek(FILE *fp) {
         uint32_t block_id = 1 + NUM_BLOCK_BITMAP * 2 + inum / NUM_INODE_EACH_BLOCK;
@@ -137,9 +145,9 @@ struct inode_t {
         //printf("seek(), block_id=%d, id_in_block=%d\n", block_id, id_in_block);
     }
 
-    void read_from_disk(FILE *fp, uint32_t inum) { // inum start from beginning of inode table
+    void read_from_disk(FILE *fp, uint16_t inum) { // inum start from beginning of inode table
         //printf("start reading inode, inum=%d\n", inum);
-        //memset(pointers, 1, sizeof(pointers));
+        memset(pointers, NON_EXIST_CONSTANT, sizeof(pointers));
         //printf("inum : %d\n", inum);
         for (int i = 0; i <= NUM_DIRECT_POINTERS; i++) {
             pointers[i] = NON_EXIST_CONSTANT;
@@ -218,10 +226,10 @@ struct inode_t {
             uint16_t indirect_block = pointers[NUM_DIRECT_POINTERS];
 
             
-           // if (indirect_block == NON_EXIST_CONSTANT) {
+            if (indirect_block == NON_EXIST_CONSTANT) {
                 indirect_block = dmap.find_free();    
                 pointers[NUM_DIRECT_POINTERS] = indirect_block;
-           // }
+            }
            
         }
     }
@@ -672,21 +680,27 @@ void create_empty_folder(string path, string folder_name){
 
 void callsystem(){
     create_empty_disk("HD.dat");
-    
-    //read_disk_info();
+    read_disk_info();
 
     //read_all_bytes("HD.dat");
-
-    copy_file_from_outside("/", "os.txt");
-    copy_file_from_outside("/", "ahihi.cpp");
+    copy_file_from_outside("/", "big.txt");
+/*    copy_file_from_outside("/", "ahihi.cpp");
 
    // delete_file_disk("/", "os.txt");
     //delete_file_disk("/", "ahihi.cpp");
     
     create_empty_folder("/", "folder1");
-    //copy_file_from_outside("/folder1", "os.txt");
-    //read_disk_info();
-
+    read_disk_info();
+    list_disk();
+    copy_file_from_outside("/folder1", "os.txt");
+    read_disk_info();
+    list_disk();
+    create_empty_folder("/folder1/", "subfolder1");
+    read_disk_info();
+    list_disk();
+    copy_file_from_outside("/folder1/subfolder1/", "ahihi.cpp");
+*/
+    read_disk_info();
     list_disk();
 }
 
@@ -761,12 +775,8 @@ void interface(){
 }
 
 int main() {
-
-    
-    //callsystem();
-
-    interface();
-    
+    callsystem();
+    //interface();
     //copy_file_to_outside("/", "os.txt", "copyfile.txt");
     return 0;
 }
