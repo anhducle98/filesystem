@@ -29,7 +29,7 @@ struct bitmap_t {
     }
 
     void clear() {
-        memset(element, 0, NUM_INTS_BITMAP);
+        memset(element, 0, sizeof element);
         need_update.clear();
     }
 

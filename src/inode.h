@@ -53,17 +53,16 @@ struct inode_t {
 
         data_blocks_ids.clear();
 
-        for (int i = 0; i < block_count; ++i) {
-            if (i < NUM_DIRECT_POINTERS) {
-                data_blocks_ids.push_back(pointers[i]);
-            } else { 
-                fseek(fp, START_BYTE_OF_DATA_REGION + pointers[NUM_DIRECT_POINTERS] * BLOCK_SIZE, SEEK_SET);
-                uint16_t buffer[BLOCK_SIZE / POINTER_SIZE];
-                fread(buffer, sizeof(uint16_t), BLOCK_SIZE / POINTER_SIZE, fp);
-                uint32_t remain = block_count - NUM_DIRECT_POINTERS;
-                for (int j = 0; j < remain; ++j) {
-                    data_blocks_ids.push_back(buffer[j]);
-                }
+        for (int i = 0; i < block_count && i < NUM_DIRECT_POINTERS; ++i) {
+            data_blocks_ids.push_back(pointers[i]);
+        }
+        if (block_count > NUM_DIRECT_POINTERS) {
+            fseek(fp, START_BYTE_OF_DATA_REGION + pointers[NUM_DIRECT_POINTERS] * BLOCK_SIZE, SEEK_SET);
+            uint16_t buffer[BLOCK_SIZE / POINTER_SIZE];
+            fread(buffer, sizeof(uint16_t), BLOCK_SIZE / POINTER_SIZE, fp);
+            int remain = block_count - NUM_DIRECT_POINTERS;
+            for (int j = 0; j < remain; ++j) {
+                data_blocks_ids.push_back(buffer[j]);
             }
         }
     }
@@ -75,9 +74,11 @@ struct inode_t {
         fwrite(&type, sizeof type, 1, fp);
         fwrite(pointers, sizeof(uint16_t), NUM_DIRECT_POINTERS + 1, fp);
 
+        assert(block_count == data_blocks_ids.size());
+
         if (block_count > NUM_DIRECT_POINTERS) {
             fseek(fp, START_BYTE_OF_DATA_REGION + pointers[NUM_DIRECT_POINTERS] * BLOCK_SIZE, SEEK_SET);
-            fwrite(data_blocks_ids.data() + NUM_DIRECT_POINTERS * sizeof(uint16_t), sizeof(uint16_t), data_blocks_ids.size() - NUM_DIRECT_POINTERS, fp);
+            fwrite(data_blocks_ids.data() + NUM_DIRECT_POINTERS, sizeof(uint16_t), data_blocks_ids.size() - NUM_DIRECT_POINTERS, fp);
         }
 
         imap->write_to_disk(fp);
