@@ -292,8 +292,8 @@ struct directory_t {
     }
 
     uint16_t get_inum_of_child(string child) {
-   		for(int i = 0; i < a.size(); i++) {
-   			if(a[i].second == child){
+   		for (int i = 0; i < a.size(); i++) {
+   			if (a[i].second == child) {
    				return a[i].first;
    			}
    		}
@@ -385,27 +385,13 @@ void create_empty_directory(FILE *fp, string dir_name, uint16_t parent_inum) {
         cur_dir.a.push_back(make_pair(parent_inum, ".."));
         cur_dir.a.push_back(make_pair(cur_dir.inode.inum, dir_name));
         
-        
-
-        
-
         directory_t parent_dir;
         
         parent_dir.read_from_disk(fp, parent_inum);
         parent_dir.a.push_back(make_pair(cur_dir.inode.inum, dir_name));
-        
-
-        
-
-        
-        
-        
+    
         parent_dir.write_to_disk(fp);
         cur_dir.write_to_disk(fp);
-        
-       // new_inode.write_to_disk(fp);
-        
-
     }
 }
 
@@ -506,7 +492,7 @@ directory_t get_dir_from_path(vector < string > dir, FILE *fp) {
 	directory_t cur_dir;
     cur_dir.read_from_disk(fp, ROOT_INUM);
     //printf("read from disk\n");
-	for(int i = 0; i < dir.size(); i++) {
+	for (int i = 0; i < dir.size(); i++) {
         uint16_t inum = cur_dir.get_inum_of_child(dir[i]);
         assert(inum != NON_EXIST_CONSTANT);
 		cur_dir.read_from_disk(fp, inum);
@@ -605,7 +591,7 @@ void copy_file_from_outside(string path, string file_name) {
     printf("added file successfully \n \n");
 }
 
-void copy_file_to_outside(string path, string copy_file_name, string paste_file_name){
+void copy_file_to_outside(string path, string copy_file_name, string paste_file_name) {
     //cout << path << " " << copy_file_name << " " << paste_file_name;
     FILE *fp = fopen(DEFAULT_DISK, "rb");
     FILE *paste_file = fopen(paste_file_name.c_str(), "wb");
@@ -625,7 +611,7 @@ void copy_file_to_outside(string path, string copy_file_name, string paste_file_
     //printf("size of file = %d nbblocks = %d \n", inode.size, inode.block_count);
     uint32_t size_file = inode.size;
 
-    for(int i = 0; i < inode.data_blocks_ids.size(); i++) {
+    for (int i = 0; i < inode.data_blocks_ids.size(); i++) {
         pointer_t block_id = inode.data_blocks_ids[i];
         printf("block_id = %d \n", block_id);
         
@@ -641,8 +627,7 @@ void copy_file_to_outside(string path, string copy_file_name, string paste_file_
     printf("copy file successfully \n \n");
 }
 
-
-void delete_file_disk(string path, string file_name){
+void delete_file_disk(string path, string file_name) {
     FILE *fp = fopen(DEFAULT_DISK, "r+b");
 
     vector < string > dir = split_path(path);
@@ -654,13 +639,13 @@ void delete_file_disk(string path, string file_name){
     inode_t inode;
     inode.read_from_disk(fp, inum);
 
-    for(uint32_t data_block_id : inode.data_blocks_ids){
+    for (uint32_t data_block_id : inode.data_blocks_ids) {
         assert(dmap.get(data_block_id) != 0);
         dmap.toggle(data_block_id);
     }
 
     for (int i = 0; i < cur_dir.a.size(); i++) {
-        if(cur_dir.a[i].second == file_name){
+        if (cur_dir.a[i].second == file_name) {
             assert(imap.get(cur_dir.a[i].first) != 0);
             imap.toggle(cur_dir.a[i].first);
 
@@ -668,19 +653,17 @@ void delete_file_disk(string path, string file_name){
         }
     }
 
-
     cur_dir.write_to_disk(fp);
     printf("deleted file \n \n");
     fclose(fp);
 }
 
-void create_empty_folder(string path, string folder_name){
-    
+void create_empty_folder(string path, string folder_name) {
     FILE *fp = fopen(DEFAULT_DISK, "r+b");
-    
+
     vector < string > dir = split_path(path);
-    
     directory_t cur_dir = get_dir_from_path(dir, fp);
+
     if (cur_dir.contains(folder_name)) {
         printf("Folder exist! Do nothing\n");
         return;
@@ -691,9 +674,39 @@ void create_empty_folder(string path, string folder_name){
     fclose(fp);
 }
 
+void view_text_file(string file_path, FILE *fp = nullptr) {
+    bool new_disk_opened = false;
+    if (fp == nullptr) {
+        fp = fopen(DEFAULT_DISK, "rb");
+        new_disk_opened = true;
+    }
 
+    vector<string> dir = split_path(file_path);
+    string file_name = dir.back();
+    dir.pop_back();
 
-void callsystem(){
+    inode_t inode;
+    inode.read_from_disk(fp, get_dir_from_path(dir, fp).get_inum_of_child(file_name));
+
+    uint8_t buffer[BLOCK_SIZE];
+    int size_remain = inode.size;
+    for (uint16_t data_block_id : inode.data_blocks_ids) {
+        fseek(fp, START_BYTE_OF_DATA_REGION + data_block_id * BLOCK_SIZE, SEEK_SET);
+        int num_read = min((int)BLOCK_SIZE, size_remain);
+        fread(buffer, 1, num_read, fp);
+        size_remain -= num_read;
+
+        for (int i = 0; i < num_read; ++i) {
+            printf("%c", (char) buffer[i]);
+        }
+    }
+
+    if (new_disk_opened) {
+        fclose(fp);
+    }
+}
+
+void callsystem() {
     //create_empty_disk("HD.dat");
     read_disk_info();
 
@@ -701,6 +714,8 @@ void callsystem(){
     copy_file_from_outside("/", "big.txt");
     create_empty_folder("/", "code");
     copy_file_from_outside("/code/", "main.cpp");
+    copy_file_from_outside("/code/", "shit.cpp");
+    view_text_file("/code/shit.cpp");
 /*    copy_file_from_outside("/", "ahihi.cpp");
 
    // delete_file_disk("/", "os.txt");
@@ -721,7 +736,7 @@ void callsystem(){
     list_disk();
 }
 
-void interface(){
+void interface() {
 //    list_disk();
     string type, filename, copy_file_name;
 
@@ -732,37 +747,37 @@ void interface(){
 
     string cur_path = "/";
 
-    while(1){
+    while (1) {
         printf("%s : ", cur_path.c_str());
         cin >> type;
         
-        if(type == "ls"){
+        if (type == "ls") {
             printf("| ");
-            for(auto it : cur_dir.a){
-                if(it.first == cur_dir.inode.inum && it.second == "..") continue;
+            for (auto it : cur_dir.a) {
+                if (it.first == cur_dir.inode.inum && it.second == "..") continue;
                 printf("%s | ", it.second.c_str());
             }
             printf("\n");
         }
 
-        if(type == "cd"){
+        if (type == "cd") {
             
             bool pick = 0;
-            while(pick == 0){
+            while (pick == 0) {
                 cin >> filename;
-                for(auto it : cur_dir.a){
-                    if(it.first == cur_dir.inode.inum) continue;
-                    if(it.second == filename && it.second != ".."){
+                for (auto it : cur_dir.a) {
+                    if (it.first == cur_dir.inode.inum) continue;
+                    if (it.second == filename && it.second != "..") {
                         cur_dir.read_from_disk(fp, it.first);
                         cur_path += filename + "/";
                         pick = 1;
                         printf("ok\n");
                         break;
                     }
-                    if(it.second == filename && it.second == ".."){
+                    if (it.second == filename && it.second == "..") {
                         printf("ok\n");
                         cur_path.pop_back();
-                        while(cur_path.back() != '/')
+                        while (cur_path.back() != '/')
                             cur_path.pop_back();
                         cur_dir.read_from_disk(fp, it.first);
                         pick = 1;
@@ -772,19 +787,19 @@ void interface(){
             }
         }
 
-        /*if(type == "addfile"){
+        /*if (type == "addfile") {
             cin >> filename;
             copy_file_from_outside(cur_path, filename);
         }
 
-        if(type == "addfolder"){
+        if (type == "addfolder") {
             string foldername;
             cin >> foldername;
             create_empty_folder(cur_path, foldername);
             cur_dir.read_from_disk(fp, cur_dir.inode.inum);
         }
 
-        if(type == "delete"){
+        if (type == "delete") {
             cin >> filename;
             delete_file_disk(cur_path, filename);
         }*/
