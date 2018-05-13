@@ -233,6 +233,8 @@ struct file_system_t {
             return;
         }
 
+        file_name = split_path(file_name).back();
+
         uint16_t new_inum = imap.find_free();
         inode_t new_inode(&imap, &dmap);
 
