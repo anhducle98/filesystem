@@ -42,7 +42,11 @@ struct interface_t {
                 do_copy();
             } else if (type == "cat") {
                 do_cat();
-            } else if (type == "tree") {
+            } else if (type == "mv") {
+                do_move();
+            } else if (type == "info") {
+                do_info();
+            }else if (type == "tree") {
                 do_tree();
             } else if (type == "poweroff") {
                 printf("Goodbye!\n");
@@ -134,8 +138,24 @@ struct interface_t {
         FS.view_text_file(file_path);
     }
 
+    void do_move() {
+        string from_path, to_path;
+        cin >> from_path >> to_path;
+        if (from_path[0] != '/') {
+            from_path = cur_path + from_path;
+        }
+        if (to_path[0] != '/') {
+            to_path = cur_path + to_path;
+        }
+        FS.move_entry(from_path, to_path);
+    }
+
     void do_tree() {
         FS.list_disk();
+    }
+
+    void do_info() {
+        FS.read_disk_info();
     }
 };
 

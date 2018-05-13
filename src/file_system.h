@@ -93,7 +93,7 @@ struct file_system_t {
         }
     }
 
-    vector< string > split_path(string path) {
+    vector< string > split_path(string path, bool ommit_last_entry = false) {
         vector< string > dir;
         for (int i = 0; i < path.size();) {
             int pos = i;
@@ -103,10 +103,15 @@ struct file_system_t {
                 dir.push_back(path.substr(i, pos - i));
             i = pos + 1;
         }
+        if (ommit_last_entry) {
+            if (!dir.empty()) {
+                dir.pop_back();
+            }
+        }
         return dir;
     }
 
-    directory_t get_dir_from_path(vector< string > dir, FILE *fp) {
+    directory_t get_dir_from_path(vector< string > dir) {
         directory_t cur_dir(&imap, &dmap);
         cur_dir.read_from_disk(fp, ROOT_INUM);
         for (int i = 0; i < dir.size(); i++) {
@@ -149,7 +154,7 @@ struct file_system_t {
         FILE *fp = fopen(DEFAULT_DISK, "r+b");
 
         vector < string > dir = split_path(path);
-        directory_t cur_dir = get_dir_from_path(dir, fp);
+        directory_t cur_dir = get_dir_from_path(dir);
 
         if (cur_dir.contains(folder_name)) {
             printf("Folder exist! Do nothing\n");
@@ -191,7 +196,7 @@ struct file_system_t {
         dir.pop_back();
 
         inode_t inode(&imap, &dmap);
-        inode.read_from_disk(fp, get_dir_from_path(dir, fp).get_inum_of_child(file_name));
+        inode.read_from_disk(fp, get_dir_from_path(dir).get_inum_of_child(file_name));
         printf("\n# START READING FILE %s\n", file_path.c_str());
         uint8_t buffer[BLOCK_SIZE];
         int size_remain = inode.size;
@@ -221,7 +226,7 @@ struct file_system_t {
         }
 
         vector<string> dir = split_path(path);
-        directory_t cur_dir = get_dir_from_path(dir, fp);
+        directory_t cur_dir = get_dir_from_path(dir);
         
         if (cur_dir.contains(file_name)) {
             printf("# ERROR: File exist! Do nothing\n");
@@ -259,7 +264,7 @@ struct file_system_t {
         FILE *paste_file = fopen(paste_file_name.c_str(), "wb");
 
         vector < string > dir = split_path(path);
-        directory_t cur_dir = get_dir_from_path(dir, fp);
+        directory_t cur_dir = get_dir_from_path(dir);
 
         uint16_t inum = cur_dir.get_inum_of_child(copy_file_name);
 
@@ -287,7 +292,7 @@ struct file_system_t {
 
     void delete_file(string path, string file_name) {
         vector < string > dir = split_path(path);
-        directory_t cur_dir = get_dir_from_path(dir, fp);
+        directory_t cur_dir = get_dir_from_path(dir);
         uint16_t inum = cur_dir.get_inum_of_child(file_name);
 
         if (inum == NON_EXIST_CONSTANT) {
@@ -326,7 +331,7 @@ struct file_system_t {
     }
 
     void delete_folder(string path, string dir_name) { // recursive
-        directory_t cur_dir = get_dir_from_path(split_path(path), fp);
+        directory_t cur_dir = get_dir_from_path(split_path(path));
         uint16_t inum = cur_dir.get_inum_of_child(dir_name);
 
         if (inum == NON_EXIST_CONSTANT) {
@@ -339,6 +344,33 @@ struct file_system_t {
         cur_dir.write_to_disk(fp);
 
         printf("\n# INFO: Folder %s%s deleted\n", path.c_str(), dir_name.c_str());
+    }
+
+    void move_entry(string from_path, string to_path) {
+        vector< string > from_splitted = split_path(from_path);
+        vector< string > to_splitted = split_path(to_path);
+        string from_name = from_splitted.back();
+        string to_name = to_splitted.back();
+        from_splitted.pop_back();
+        to_splitted.pop_back();
+
+        directory_t from_dir = get_dir_from_path(from_splitted);
+        directory_t to_dir = get_dir_from_path(to_splitted);
+        if (!from_dir.contains(from_name)) {
+            printf("\n# ERROR: File %s doesn't exist!\n", from_path.c_str());
+            return;
+        }
+        if (to_dir.contains(to_name)) {
+            printf("\n# ERROR: File %s exist!\n", to_path.c_str());
+            return;
+        }
+
+        uint16_t inum = from_dir.delete_entry(from_name);
+        
+        to_dir.a.push_back(make_pair(inum, to_name));
+
+        from_dir.write_to_disk(fp);
+        to_dir.write_to_disk(fp);
     }
 
     ~file_system_t() {

@@ -102,6 +102,11 @@ struct inode_t {
             uint16_t new_block = dmap->find_free();
             data_blocks_ids.push_back(new_block);
         }
+        while (block_count > nblock) {
+            block_count -= 1;
+            dmap->toggle(data_blocks_ids.back());
+            data_blocks_ids.pop_back();
+        }
 
         for (int i = 0; i < data_blocks_ids.size() && i < NUM_DIRECT_POINTERS; ++i) {
             pointers[i] = data_blocks_ids[i];
@@ -113,6 +118,9 @@ struct inode_t {
                 indirect_block = dmap->find_free();    
                 pointers[NUM_DIRECT_POINTERS] = indirect_block;
             }
+        } else if (pointers[NUM_DIRECT_POINTERS] != NON_EXIST_CONSTANT) {
+            dmap->toggle(pointers[NUM_DIRECT_POINTERS]);
+            pointers[NUM_DIRECT_POINTERS] = NON_EXIST_CONSTANT;
         }
     }
 };

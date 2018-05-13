@@ -50,13 +50,15 @@ struct directory_t {
         read_children_list(fp);
     }
 
-    void delete_entry(string name) {
+    uint16_t delete_entry(string name) {
         for (int i = 0; i < a.size(); i++) {
             if (a[i].second == name) {
+                uint16_t inum = a[i].first;
                 a.erase(a.begin() + i);
-                break;
+                return inum;
             }
         }
+        return NON_EXIST_CONSTANT;
     }
 
     uint32_t serialize(uint8_t *&res) {
