@@ -8,11 +8,15 @@
 #include "constants.h"
 
 struct bitmap_t {
+    static const int NUM_BITS = 32 * NUM_INTS_BITMAP;
+
     uint32_t element[NUM_INTS_BITMAP];
     vector<uint32_t> need_update;
     int start_block; // imap starts from 1, dmap starts from 9
 
-    bitmap_t(int start_block): start_block(start_block) {}
+    int last_set;
+
+    bitmap_t(int start_block): start_block(start_block), last_set(0) {}
 
     void read_from_disk(FILE *fp) {
         fseek(fp, start_block * BLOCK_SIZE, SEEK_SET);
@@ -31,6 +35,7 @@ struct bitmap_t {
     void clear() {
         memset(element, 0, sizeof element);
         need_update.clear();
+        last_set = 0;
     }
 
     bool get(int i) {
@@ -39,6 +44,7 @@ struct bitmap_t {
 
     bool set(int i) {
         need_update.push_back(i >> 5);
+        last_set = i;
         return (element[i >> 5] |= (1 << (i & 0x1F)));
     }
 
@@ -56,7 +62,7 @@ struct bitmap_t {
     }
 
     uint16_t find_free() {
-        for (int i = 0; i < 32 * NUM_INTS_BITMAP; i++) {
+        for (int i = (last_set + 1) % NUM_BITS; i != last_set; i = (i + 1) % NUM_BITS) {
             if (get(i) == 0) {
                 set(i);
                 return i;

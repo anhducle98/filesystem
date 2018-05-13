@@ -61,6 +61,15 @@ struct directory_t {
         return NON_EXIST_CONSTANT;
     }
 
+    void rename(string from, string to) {
+        for (int i = 0; i < a.size(); ++i) {
+            if (a[i].second == from) {
+                a[i].second = to;
+                break;
+            }
+        }
+    }
+
     uint32_t serialize(uint8_t *&res) {
         int num_bytes = get_byte_array_size();
 

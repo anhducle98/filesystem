@@ -364,13 +364,15 @@ struct file_system_t {
             printf("\n# ERROR: File %s exist!\n", to_path.c_str());
             return;
         }
-
-        uint16_t inum = from_dir.delete_entry(from_name);
-        
-        to_dir.a.push_back(make_pair(inum, to_name));
-
-        from_dir.write_to_disk(fp);
-        to_dir.write_to_disk(fp);
+        if (from_dir.inode.inum == to_dir.inode.inum) {
+            from_dir.rename(from_name, to_name);
+            from_dir.write_to_disk(fp);
+        } else {
+            uint16_t inum = from_dir.delete_entry(from_name);        
+            to_dir.a.push_back(make_pair(inum, to_name));
+            from_dir.write_to_disk(fp);
+            to_dir.write_to_disk(fp);
+        }
     }
 
     ~file_system_t() {
