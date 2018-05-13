@@ -66,10 +66,17 @@ namespace SPECIAL_CONSTANTS {
     const uint16_t NON_EXIST_CONSTANT = (uint16_t)(-1);
 }
 
+namespace SYSTEM_COLOR {
+    const char *CL_GREEN = "\033[01;32m";
+    const char *CL_BLUE = "\033[01;34m";
+    const char *CL_RESET = "\x1b[0m";
+    const char *CL_WHITE = "\033[01;37m";
+}
+
 using namespace DISK_INFO;
 using namespace FILE_SYSTEM_INFO;
 using namespace SPECIAL_CONSTANTS;
-
+using namespace SYSTEM_COLOR;
 using namespace std;
 
 #endif
