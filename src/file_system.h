@@ -167,7 +167,7 @@ struct file_system_t {
         for (int i = 0; i < level; ++i) {
             printf("----");
         }
-        printf("| %s, inum=%d, size=%d\n", cur_name.c_str(), inode.inum, inode.size);
+        printf("| \"%s\" - [%d bytes]\n", cur_name.c_str(), inode.inum, inode.size);
 
         if (inode.type == inode_t::TYPE_DIRECTORY) {
             directory_t dir(&imap, &dmap);

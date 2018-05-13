@@ -35,6 +35,8 @@ struct interface_t {
                 do_copy();
             } else if (type == "cat") {
                 do_cat();
+            } else if (type == "tree") {
+                do_tree();
             } else if (type == "poweroff") {
                 printf("Goodbye!\n");
                 break;
@@ -120,6 +122,10 @@ struct interface_t {
         string file_path;
         cin >> file_path;
         FS.view_text_file(file_path);
+    }
+
+    void do_tree() {
+        FS.list_disk();
     }
 };
 
