@@ -82,7 +82,7 @@ struct interface_t {
             if (it.first == cur_dir.inode.inum || it.second == "..") {
                 continue;
             }
-            if (it.second.find('.') == it.second.npos) {
+            if (FS.is_directory(it.first)) {
                 printf("%s%s%s\n", CL_BLUE, it.second.c_str(), CL_RESET);
             } else {
                 printf("%s\n", it.second.c_str());

@@ -207,6 +207,12 @@ struct file_system_t {
         printf("\n# END OF FILE %s\n", file_path.c_str());
     }
 
+    bool is_directory(uint16_t inum) {
+        inode_t inode;
+        inode.read_from_disk(fp, inum);
+        return inode.type == inode_t::TYPE_DIRECTORY;
+    }
+
     void copy_file_from_outside(string path, string file_name) {
         FILE *cur_file = fopen(file_name.c_str(), "rb");
         if (cur_file == nullptr) {
