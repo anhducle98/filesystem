@@ -1,7 +1,5 @@
 #include <stdio.h>
-#include <vector>
 #include <cassert>
-#include <bits/stdc++.h>
 
 #include "file_system.h"
 #include "interface.h"

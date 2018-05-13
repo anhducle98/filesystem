@@ -57,25 +57,25 @@ struct interface_t {
         }
     }
 
-    void do_cd() {
-        // TODO: fix cd to file
-        // TODO: cd to path
+    /**
+     * cd to single directory
+     * @param dir directory we want to go
+     * @return -1 if it's a file, 0 if dir is not exist, 1 if success
+     */
+    int do_cd_one_dir(const string &dir) {
         bool pick = 0;
-        string filename;
-        cin >> filename;
         for(auto it : cur_dir.a) {
-            if (it.second != filename) {
+            if (it.second != dir) {
                 continue;
             }
             if (it.second == ".") {
                 pick = 1;
             } else if (it.second != "..") {
                 if (cur_dir.read_from_disk(FS.fp, it.first)) {
-                    cur_path += filename + "/";
+                    cur_path += dir + "/";
                     pick = 1;
                 } else {
-                    printf("bash: cd: %s: Not a directory\n", filename.c_str());
-                    return;
+                    return -1;
                 }
             } else {
                 cur_path.pop_back();
@@ -87,8 +87,33 @@ struct interface_t {
             }
             break;
         }
-        if (!pick) {
-            printf("bash: cd: %s: No such file or directory\n", filename.c_str());
+        return pick;
+    }
+
+    void do_cd() {
+        string backup_path = cur_path;
+        directory_t backup_dir = cur_dir;
+        string filename;
+        cin >> filename;
+        if (filename[0] == '/') {
+            cur_dir.read_from_disk(FS.fp, ROOT_INUM);
+            cur_path = "/";
+        }
+        vector<string> dir = FS.split_path(filename);
+        for (string u : dir) {
+            int verdict = do_cd_one_dir(u);
+            if (verdict == -1) {
+                printf("bash: cd: %s: Not a directory\n", filename.c_str());
+                cur_path = backup_path;
+                cur_dir = backup_dir;
+                return;
+            }
+            if (verdict == 0) {
+                printf("bash: cd: %s: No such file or directory\n", filename.c_str());
+                cur_path = backup_path;
+                cur_dir = backup_dir;
+                return;
+            }
         }
     }
 
