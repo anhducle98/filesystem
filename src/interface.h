@@ -89,6 +89,7 @@ struct interface_t {
     }
 
     void do_ls() {
+        cur_dir.read_from_disk(FS.fp, cur_dir.inode.inum);
         for (auto it : cur_dir.a) {
             if (it.first == cur_dir.inode.inum || it.second == "..") {
                 continue;
