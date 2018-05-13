@@ -12,10 +12,8 @@ void callsystem() {
 
     FS.create_empty_folder("/", "code");
     FS.copy_file_from_outside("/code/", "os.txt");
-    FS.copy_file_from_outside("/code/", "shit.cpp");
     FS.copy_file_from_outside("/", "big.txt");
     FS.create_empty_folder("/code/", "cpp");
-    FS.copy_file_from_outside("/code/cpp/", "shit.cpp");
 
     FS.read_disk_info();
     FS.list_disk();
