@@ -44,10 +44,21 @@ struct directory_t {
         }
     }
 
-    void read_from_disk(FILE *fp, uint16_t inum) {
+    /**
+     * Read directory from disk
+     * @param fp disk name
+     * @param inum idex of inode we want to read
+     * @return 1 if read directory successfully, 0 if failed or not a directory
+    */
+    bool read_from_disk(FILE *fp, uint16_t inum) {
+        directory_t backup = *this;
         inode.read_from_disk(fp, inum);
-        assert(inode.type == inode_t::TYPE_DIRECTORY);
+        if (inode.type != inode_t::TYPE_DIRECTORY) {
+            *this = backup;
+            return 0;
+        }
         read_children_list(fp);
+        return 1;
     }
 
     uint16_t delete_entry(string name) {

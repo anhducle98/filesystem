@@ -70,9 +70,13 @@ struct interface_t {
             if (it.second == ".") {
                 pick = 1;
             } else if (it.second != "..") {
-                cur_dir.read_from_disk(FS.fp, it.first);
-                cur_path += filename + "/";
-                pick = 1;
+                if (cur_dir.read_from_disk(FS.fp, it.first)) {
+                    cur_path += filename + "/";
+                    pick = 1;
+                } else {
+                    printf("bash: cd: %s: Not a directory\n", filename.c_str());
+                    return;
+                }
             } else {
                 cur_path.pop_back();
                 while(cur_path.back() != '/') {
