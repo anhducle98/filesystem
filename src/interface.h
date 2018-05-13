@@ -6,6 +6,13 @@
 #include "file_system.h"
 #include "constants.h"
 
+#ifndef __unix__
+#define CL_WHITE ""
+#define CL_BLUE ""
+#define CL_GREEN ""
+#define CL_RESET ""
+#endif
+
 struct interface_t {
     file_system_t FS;
     string cur_path = "/";
