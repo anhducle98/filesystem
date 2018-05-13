@@ -121,6 +121,9 @@ struct interface_t {
     void do_cat() {
         string file_path;
         cin >> file_path;
+        if (file_path[0] != '/') {
+            file_path = cur_path + file_path;
+        }
         FS.view_text_file(file_path);
     }
 
