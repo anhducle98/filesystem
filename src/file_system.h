@@ -292,26 +292,6 @@ struct file_system_t {
         printf("\n# INFO: File %s exported to %s\n", copy_file_name.c_str(), paste_file_name.c_str());
     }
 
-    void delete_file(string path, string file_name) {
-        vector < string > dir = split_path(path);
-        directory_t cur_dir = get_dir_from_path(dir);
-        uint16_t inum = cur_dir.get_inum_of_child(file_name);
-
-        if (inum == NON_EXIST_CONSTANT) {
-            printf("\n# ERROR: Cannot find file %s\n", file_name.c_str());
-            return;
-        }
-
-        inode_t inode(&imap, &dmap);
-        inode.read_from_disk(fp, inum);
-        inode.delete_myself();
-
-        cur_dir.delete_entry(file_name);
-        cur_dir.write_to_disk(fp);
-
-        printf("\n# INFO: File %s deleted\n", file_name.c_str());
-    }
-
     void delete_directory(uint16_t inum) {
         inode_t inode(&imap, &dmap);
         inode.read_from_disk(fp, inum);
@@ -332,20 +312,22 @@ struct file_system_t {
         }
     }
 
-    void delete_folder(string path, string dir_name) { // recursive
-        directory_t cur_dir = get_dir_from_path(split_path(path));
-        uint16_t inum = cur_dir.get_inum_of_child(dir_name);
+    void delete_file(string path, string file_name) {
+        vector < string > dir = split_path(path);
+        directory_t cur_dir = get_dir_from_path(dir);
+        uint16_t inum = cur_dir.get_inum_of_child(file_name);
 
         if (inum == NON_EXIST_CONSTANT) {
-            printf("\n# ERROR: Cannot find folder %s%s\n", path.c_str(), dir_name.c_str());
+            printf("\n# ERROR: Cannot find file %s\n", file_name.c_str());
             return;
         }
 
         delete_directory(inum);
-        cur_dir.delete_entry(dir_name);
+
+        cur_dir.delete_entry(file_name);
         cur_dir.write_to_disk(fp);
 
-        printf("\n# INFO: Folder %s%s deleted\n", path.c_str(), dir_name.c_str());
+        printf("\n# INFO: File %s deleted\n", file_name.c_str());
     }
 
     void move_entry(string from_path, string to_path) {
